@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>激ムズボール避けゲーム</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      font-family: sans-serif;
+      color: #fff;
+      text-align: center;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      margin: 10px auto;
+      border: 2px solid #fff;
+      background: #000;
+    }
+    #score, #highScore {
+      font-size: 15px;
+      font-weight: bold;
+    }
+    #startBtn {
+      font-size: 15px;
+      padding: 10px 20px;
+      margin: 10px;
+      background: limegreen;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #skinSelect {
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h3>🔥激ムズボール避け🔥</h3>
+  <select id="skinSelect">
+    <option value="default">スキン: デフォルト</option>
+    <option value="neon">スキン: ネオン</option>
+    <option value="fancy">スキン: ファンシー</option>
+  </select>
+  <div id="score">スコア: 0</div>
+  <div id="highScore">最高スコア: 0</div>
+  <button id="startBtn">スタート</button>
+  <canvas id="gameCanvas" width="400" height="500"></canvas>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const startBtn = document.getElementById("startBtn");
+    const scoreDisplay = document.getElementById("score");
+    const highScoreDisplay = document.getElementById("highScore");
+    const skinSelect = document.getElementById("skinSelect");
+
+    let snake, snakeLength, dx, speed;
+    let obstacles, items, score, gameOver, obstacleSpeed, obstacleInterval, obstacleTimer, isGameRunning;
+    let invincible = false;
+    let stageLevel = 0;
+    let currentSkin = "default";
+    let highScore = localStorage.getItem("highScore") || 0;
+    highScoreDisplay.textContent = `最高スコア: ${highScore}`;
+
+    const initGame = () => {
+      snake = [];
+      snakeLength = 6;
+      dx = 0;
+      speed = 6;
+      for (let i = 0; i < snakeLength; i++) {
+        snake.push({ x: 200 - i * 10, y: 450 });
+      }
+      obstacles = [];
+      items = [];
+      score = 0;
+      gameOver = false;
+      obstacleSpeed = 5;
+      obstacleInterval = 700;
+      stageLevel = 0;
+      invincible = false;
+      currentSkin = skinSelect.value;
+      scoreDisplay.textContent = `スコア: ${score}`;
+      updateBackground();
+    };
+
+    const getSkinColor = () => {
+      switch (currentSkin) {
+        case "neon": return "lime";
+        case "fancy": return "gold";
+        default: return "aqua";
+      }
+    };
+
+    const drawSnake = () => {
+      ctx.fillStyle = invincible ? "deeppink" : getSkinColor();
+      snake.forEach(segment => {
+        ctx.beginPath();
+        ctx.arc(segment.x, segment.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.closePath();
+      });
+    };
+
+    const drawObstacles = () => {
+      obstacles.forEach(obs => {
+        ctx.fillStyle = obs.feint ? "orange" : "red";
+        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+      });
+    };
+
+    const drawItems = () => {
+      ctx.fillStyle = "yellow";
+      items.forEach(item => {
+        ctx.beginPath();
+        ctx.arc(item.x, item.y, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.closePath();
+      });
+    };
+
+    const updateObstacles = () => {
+      for (let i = obstacles.length - 1; i >= 0; i--) {
+        const obs = obstacles[i];
+        if (obs.feint) {
+          obs.x += Math.sin(obs.y / 20) * 2;
+          obs.x = Math.max(0, Math.min(canvas.width - obs.width, obs.x));
+        }
+        obs.y += obstacleSpeed;
+
+        const head = snake[0];
+        if (!invincible && head.x + 8 > obs.x && head.x - 8 < obs.x + obs.width &&
+            head.y + 8 > obs.y && head.y - 8 < obs.y + obs.height) {
+          gameOver = true;
+        }
+
+        if (obs.y > canvas.height) {
+          obstacles.splice(i, 1);
+          score++;
+          scoreDisplay.textContent = `スコア: ${score}`;
+          if (score > highScore) {
+            highScore = score;
+            localStorage.setItem("highScore", highScore);
+            highScoreDisplay.textContent = `最高スコア: ${highScore}`;
+          }
+        }
+      }
+    };
+
+    const updateItems = () => {
+      for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
+        item.y += obstacleSpeed;
+
+        const head = snake[0];
+        if (head.x + 8 > item.x - 10 && head.x - 8 < item.x + 10 &&
+            head.y + 8 > item.y - 10 && head.y - 8 < item.y + 10) {
+          items.splice(i, 1);
+          activateInvincible();
+        }
+
+        if (item.y > canvas.height) {
+          items.splice(i, 1);
+        }
+      }
+    };
+
+    const activateInvincible = () => {
+      invincible = true;
+      setTimeout(() => invincible = false, 5000);
+    };
+
+    const addObstacle = () => {
+      if (Math.random() < 0.1) {
+        const gapWidth = 60;
+        const totalWidth = canvas.width;
+        const gapX = Math.random() * (totalWidth - gapWidth);
+        if (gapX > 0) {
+          obstacles.push({ x: 0, y: -20, width: gapX, height: 20, feint: false });
+        }
+        if (gapX + gapWidth < totalWidth) {
+          obstacles.push({ x: gapX + gapWidth, y: -20, width: totalWidth - (gapX + gapWidth), height: 20, feint: false });
+        }
+        return;
+      }
+
+      const width = Math.random() * 80 + 40;
+      const x = Math.random() * (canvas.width - width);
+      const feint = Math.random() < 0.4;
+      obstacles.push({ x, y: -20, width, height: 20, feint });
+
+      if (Math.random() < 0.1) {
+        const ix = Math.random() * (canvas.width - 20) + 10;
+        items.push({ x: ix, y: -20 });
+      }
+    };
+
+    const update = () => {
+      if (!isGameRunning) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (gameOver) {
+        ctx.fillStyle = "white";
+        ctx.font = "36px sans-serif";
+        ctx.fillText("ゲームオーバー", 90, 250);
+        startBtn.textContent = "リスタート";
+        startBtn.style.display = "inline-block";
+        isGameRunning = false;
+        clearInterval(obstacleTimer);
+        return;
+      }
+
+      const newStage = Math.floor(score / 20);
+      if (newStage !== stageLevel) {
+        stageLevel = newStage;
+        updateBackground();
+      }
+
+      const head = {
+        x: Math.max(8, Math.min(canvas.width - 8, snake[0].x + dx)),
+        y: 450
+      };
+      snake.unshift(head);
+      if (snake.length > snakeLength) snake.pop();
+
+      drawSnake();
+      drawObstacles();
+      drawItems();
+      updateObstacles();
+      updateItems();
+    };
+
+    const updateBackground = () => {
+      const colors = ["#000", "#555", "#999", "#533", "#833"];
+      canvas.style.background = colors[stageLevel % colors.length];
+    };
+
+    document.addEventListener("keydown", e => {
+      if (e.key === "ArrowLeft") dx = -speed;
+      if (e.key === "ArrowRight") dx = speed;
+    });
+    document.addEventListener("keyup", e => {
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") dx = 0;
+    });
+
+    setInterval(update, 1000 / 60);
+
+    setInterval(() => {
+      if (isGameRunning && !gameOver) {
+        obstacleSpeed += 0.2;
+        obstacleInterval = Math.max(200, obstacleInterval - 30);
+        clearInterval(obstacleTimer);
+        obstacleTimer = setInterval(addObstacle, obstacleInterval);
+      }
+    }, 1000);
+
+    startBtn.addEventListener("click", () => {
+      initGame();
+      isGameRunning = true;
+      startBtn.style.display = "none";
+      obstacleTimer = setInterval(addObstacle, obstacleInterval);
+    });
+  </script>
+</body>
+</html>
